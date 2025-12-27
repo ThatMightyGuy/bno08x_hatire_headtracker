@@ -1,4 +1,4 @@
-# BNO06X Hatire Head Tracker
+# BNO08X Hatire Head Tracker
 
 This project assumes I2C for communicating with the *BNO08X*.
 SPI is untested because frankly, I can't be bothered breaking what is working.
