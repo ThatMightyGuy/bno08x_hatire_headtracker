@@ -168,11 +168,12 @@ void getEuler(float &yaw, float &pitch, float &roll)
 	pitch = iasin(t2);
 	roll = atan2Fast(t0, t1) * RAD_TO_DEG;
   #else
-  yaw = atan2(t3, t4) * RAD_TO_DEG;
+    yaw = atan2(t3, t4) * RAD_TO_DEG;
 	pitch = asin(t2) * RAD_TO_DEG;
 	roll = atan2(t0, t1) * RAD_TO_DEG;
   #endif
 }
+
 
 void loop()
 {
