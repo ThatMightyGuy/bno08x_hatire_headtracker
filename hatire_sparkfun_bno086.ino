@@ -26,8 +26,11 @@ https://www.ceva-ip.com/wp-content/uploads/BNO080_085-Datasheet.pdf
 
 const unsigned long I2C_RATE = 400000;
 const unsigned long SERIAL_BAUD = 115200;
-// Probably should be kept unchanged
-const uint16_t IMU_INTERVAL = 1; // ms
+
+const bool USE_SPI = false;
+
+// Probably should be kept unchanged. Set to 1 if using a fast MCU
+const uint16_t IMU_INTERVAL = 2; // ms
 
 // Default address is 0x4B, but it could be set to 0x4A with a solder blob
 const uint8_t IMU_ADDRESS = 0x4B;
@@ -35,6 +38,12 @@ const uint8_t IMU_ADDRESS = 0x4B;
 
 // Set to -1 to disable interrupts
 const uint8_t PIN_INT = 10;
+
+// SPI settings
+
+const uint8_t PIN_CS = -1;
+const uint8_t PIN_WAKE = -1;
+const uint8_t PIN_RST = -1;
 
 // Enable FastTrig
 // FastTrig trades accuracy for speed
@@ -50,6 +59,9 @@ const uint8_t PIN_INT = 10;
 #include <FastTrig.h>                         // Click here to get the library: http://librarymanager/All#FastTrig
 #endif
 #include "SparkFun_BNO080_Arduino_Library.h"  // Click here to get the library: http://librarymanager/All#SparkFun_BNO080
+
+// Q_rsqrt causes a warning
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
 
 // // // // // // // //
 
@@ -80,14 +92,13 @@ void hatire_message(uint16_t code, const char Message[24], bool EOL)
 {
   hatire_t hatire;
   hatire.Capture = code;
-  memset(hatire.Data.Message, 0x00, sizeof(hatire.Data));
+  // memset(hatire.Data.Message, 0x00, sizeof(hatire.Data));
   strcpy(hatire.Data.Message, Message);
   if(EOL)
     hatire.Data.Message[23] = 0x0A;
 
   Serial.write((byte*)&hatire, sizeof(hatire));
 }
-
 
 void setup()
 {
@@ -96,20 +107,35 @@ void setup()
   ADCSRA &= ~bit(ADEN);
   DIDR0 = 0x3F;
 
-  power_spi_disable(); 
   power_adc_disable();
   power_timer1_disable();
   power_timer2_disable();
 
   Serial.begin(SERIAL_BAUD);
 
-  Wire.begin();
-  Wire.setClock(I2C_RATE);
-  imu.begin(IMU_ADDRESS, Wire, PIN_INT);
+  while(!Serial) delay(100);
+
+  if(USE_SPI)
+  {
+    if(imu.beginSPI(PIN_CS, PIN_WAKE, PIN_INT, PIN_RST) == false)
+    {
+      Serial.println("BNO080 over SPI not detected. Are you sure you have all 6 connections? Freezing...");
+      while(1);
+    }
+  }
+  else
+  {
+    power_spi_disable();
+    Wire.begin();
+    Wire.setClock(I2C_RATE);
+    if(imu.begin(IMU_ADDRESS, Wire, PIN_INT) == false)
+    {
+      Serial.println("BNO080 over I2C not detected. Are you sure you have both connections? Freezing...");
+      while(1);
+    }
+  }
 
   imu.enableGyroIntegratedRotationVector(IMU_INTERVAL);
-
-  while(!Serial) delay(100);
 
   hatire_message(2000, Version, true);
   hatire_message(5000, "HAT BEGIN", true);
@@ -168,19 +194,17 @@ void getEuler(float &yaw, float &pitch, float &roll)
 	pitch = iasin(t2);
 	roll = atan2Fast(t0, t1) * RAD_TO_DEG;
   #else
-    yaw = atan2(t3, t4) * RAD_TO_DEG;
+  yaw = atan2(t3, t4) * RAD_TO_DEG;
 	pitch = asin(t2) * RAD_TO_DEG;
 	roll = atan2(t0, t1) * RAD_TO_DEG;
   #endif
 }
 
-
 void loop()
 {
+  static hatire_t hatire;
   if (imu.dataAvailable())
   {
-    hatire_t hatire;
-
     getEuler(
       hatire.Data.Attitude.Gyro[0],
       hatire.Data.Attitude.Gyro[1],
